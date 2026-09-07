@@ -3,11 +3,11 @@
 ## Recovery anchor
 
 - 目标：在已完成的首轮 C4 基础上，将 `fish2018/webhtv:main@784b90420d646eb6c7ddcc63ad622a92c65b02b4` 相对 `ec478b0b697422a7785171c7b51a35b7a526564e` 的 51 个最新提交合并到当前 `dev2`，保留本地播放器修复、评估记录和用户备份文件。
-- 状态：第二轮增量已完成验证，待 `task_guard.sh finish` 写入最终 merge commit 与 recovery tag；本地基线 `912208261e4e342ced009b1a0b71feed4855a01d`，上游目标 `784b90420d646eb6c7ddcc63ad622a92c65b02b4`，共同祖先 `ec478b0b697422a7785171c7b51a35b7a526564e`。
+- 状态：第二轮增量已完成；merge commit `188553addf6692220a2a715790fb8706b2f423b0` 与 recovery tag `recovery/C4/20260907105426-188553addf66` 已创建；本地基线 `912208261e4e342ced009b1a0b71feed4855a01d`，上游目标 `784b90420d646eb6c7ddcc63ad622a92c65b02b4`，共同祖先 `ec478b0b697422a7785171c7b51a35b7a526564e`。
 - 回滚锚点：首轮 C4 合并 `d0809f804f812b818bcb22f36cae8634022db673`；本轮实施前 `dev2@912208261e4e342ced009b1a0b71feed4855a01d`。
 - 任务 guard：复用稳定任务 ID `C4`，范围为 194 个上游净变更路径以及本文和评估索引；5 个会话初始 `.bak20260906*` 文件由 guard 保护且不得提交。
 - 接受条件：形成以本地基线和完整上游目标为双父的 merge commit；无未解决冲突/冲突标记；本地任务文档和 5 个备份文件不丢失；上游目标成为 HEAD 祖先；双 ABI native 资产门禁、受影响 JVM 测试以及 Mobile/Leanback Java 编译通过；原子提交和 annotated recovery tag 已创建。
-- 下一动作：执行 `task_guard.sh finish`；提交后补录最终 merge commit/tag，并保持不推送。
+- 下一动作：代码任务已闭合；保持当前分支和 recovery tag，不执行远端 push。
 
 ## Authority and scope
 
@@ -172,4 +172,11 @@
 - `bash scripts/verify_mpv_native_assets.sh --require-elf`：通过；`arm64-v8a` 与 `armeabi-v7a` 的 ELF、锁定版本和打包规则均通过。
 - `bash ./gradlew :app:compileMobileArm64_v8aDebugJavaWithJavac :app:compileLeanbackArm64_v8aDebugJavaWithJavac :app:testMobileArm64_v8aDebugUnitTest --tests com.fongmi.android.tv.player.exo.ExoUtilTest --tests com.fongmi.android.tv.player.exo.ExoCompressedAudioDirectPolicyTest`：`BUILD SUCCESSFUL`；Mobile/Leanback Java 编译和两个受影响 Exo 单测通过。
 - `git diff --check`：通过。Gradle 仅报告仓库既有的 32-bit native library 警告；本轮未重建 native、未做连接设备播放回归，故不把本地构建结果扩大为实机行为结论。
-- 当前状态：代码与验证已就绪，最终提交/tag 仍由 task guard 收口；不执行远端 push。
+- 当前状态：代码、验证、merge commit 与 recovery tag 均已收口；不执行远端 push。
+
+## Closure：2026-09-07 Asia/Shanghai
+
+- Merge commit：`188553addf6692220a2a715790fb8706b2f423b0`（`merge: synchronize latest fish2018 main updates`），第一父提交为 `912208261e4e342ced009b1a0b71feed4855a01d`，第二父提交为 `784b90420d646eb6c7ddcc63ad622a92c65b02b4`。
+- Recovery tag：`recovery/C4/20260907105426-188553addf66`；`git merge-base --is-ancestor` 已确认本地基线和上游目标均为 HEAD 祖先，merge metadata 已清理。
+- 最终工作树仅保留任务开始前的 5 个受保护 `.bak` 未跟踪文件；其 SHA-256 与 guard 初始指纹一致。`docs/OCI1-oci-apk-update.md` 与 `docs/mobile-apk-link-push.md` 均保留。
+- 最终状态：完成（本地未推送）。连接设备播放、真实 OCI 下载/局域网 APK 推送和 native 重建不属于本轮验证范围，后续如需验收应另开任务。
