@@ -1,7 +1,7 @@
 # LitePan 风格剧名识别清洗优化设计
 
-> **状态**：🚧 已批准，实施中（2026-09-07）
-> **授权记录**：用户已确认“改编成设计文档后开始实施”，本次实施按本文档的分阶段方案推进；先完成第一阶段的规则/上下文基础设施和可回退验证，再继续 AI 上下文增强与群体校验。
+> **状态**：✅ 基础实施单元已完成并验证；批量扫描上下文、独立规则缓存与 TMDB 联网验证待后续阶段（2026-09-07）
+> **授权记录**：用户已确认“改编成设计文档后开始实施”。本次原子实施先落地不扩大调用方范围的规则/上下文基础设施、AI 上下文传递、本地字段约束、缓存隔离和无损回退；后续再实施真正的扫描批次分组与群体校验。
 > **适用范围**：`app/src/main/java/com/fongmi/android/tv/title/` 及其调用方
 > **参考实现**：LitePan `internal/aiorganize`、`internal/mediaorganize/planner/recognition.go` 等（commit `374affdb6584e3826cfab474fa8671418b23cf39`）
 > **依赖文档**：`docs/ai-real-title-extraction-design.md`（现有 AI 真实剧名提取设计）
@@ -129,7 +129,7 @@ private static class GroupInfo {
 }
 ```
 
-这些字段仅在 `MediaTitleResolver` 内部填充，并在日志或调试开关时通过 `SpiderDebug.log` 输出，不对外界造成影响。
+这些字段由 `MediaTitleParser`、`MediaTitleResolver` 和 `AiTitleExtractionService` 填充，并通过现有 getter/setter 在内部链路传递；由于 AI 结果缓存使用 Gson，它们会随缓存条目一并保存，便于诊断，但不改变现有解析调用方的必需输入和输出语义。日志仅输出脱敏后的文件名及证据摘要，不输出完整路径、播放 URL 或密钥。
 
 ## 6. 实现步骤（分阶段）
 
@@ -197,3 +197,46 @@ private static class GroupInfo {
 **当前实施入口**：已获得用户实施授权。第一阶段先落地不改变现有调用方接口的规则/上下文基础设施、严格字段校验、证据链和针对性单测；后续阶段在该基础上扩展批量上下文与 AI prompt，并保留规则结果作为无损回退。
 
 > **注**：本文档记录的是设计与实施边界，代码变更按阶段提交。实施时需结合现有代码实际情况调整细节，但核心思想（规则先行 → 上下文分组 → 低置信交给 AI → 本地约束 → TMDB 验证 → 无损回落）应保持不变。
+
+## 10. 本次基础实施记录（2026-09-07）
+
+### 10.1 已实施内容
+
+本次选择“最小可逆闭环”，不新增 `ScanContext` 或改动现有 UI/业务调用方：
+
+1. **受控上下文输入**：`MediaTitleRequest` 增加可选文件夹名和同组标题；文件夹只保留基名，同组标题去 URL/绝对路径、忽略空值、大小限制为 16 条并做大小写不敏感去重。
+2. **规则层共识**：`MediaTitleParser` 对同组标题执行现有清洗后的一致性投票；只有上下文置信度达到阈值时才提升剧名，不把 `rawRemarks` 或 `episodeName` 自动伪装成同组标题；纯“更新至 N 集”备注不再成为搜索候选。
+3. **证据链**：`MediaTitleResolution` 增加规则来源、上下文置信度/组大小、AI 原因码、置信度分解和降级原因；解析、AI、TMDB 缓存合并路径均保留这些信息。
+4. **AI 上下文与本地约束**：prompt 追加脱敏后的文件夹名、同组标题及规则证据；AI 返回的标题拒绝 URL、路径、清晰度/集数噪声；年份、季号、集号越界时保留规则回退值，别名字段按“遇到首个合法值”处理。
+5. **缓存隔离**：AI 标题缓存键升级为 `v2`，纳入文件夹名和同组标题，避免不同上下文复用旧 AI 结果；解析调用方不允许 AI 时仍直接规则回退。
+6. **回归覆盖**：新增上下文共识、冲突上下文、敏感路径边界、备注污染、缓存键变化、prompt 证据、AI 越界字段和多别名容错测试。
+
+### 10.2 本次变更文件
+
+- `app/src/main/java/com/fongmi/android/tv/title/MediaTitleRequest.java`
+- `app/src/main/java/com/fongmi/android/tv/title/MediaTitleCandidate.java`
+- `app/src/main/java/com/fongmi/android/tv/title/MediaTitleResolution.java`
+- `app/src/main/java/com/fongmi/android/tv/title/MediaTitleParser.java`
+- `app/src/main/java/com/fongmi/android/tv/title/MediaTitleCache.java`
+- `app/src/main/java/com/fongmi/android/tv/title/MediaTitleResolver.java`
+- `app/src/main/java/com/fongmi/android/tv/service/AiTitleExtractionService.java`
+- 对应 `app/src/test/java/com/fongmi/android/tv/title/` 和 `app/src/test/java/com/fongmi/android/tv/service/AiTitleExtractionServiceTest.java`
+
+### 10.3 验证结果
+
+执行：
+
+```bash
+./gradlew :app:testLeanbackArm64_v8aDebugUnitTest \
+  --tests 'com.fongmi.android.tv.title.*' \
+  --tests 'com.fongmi.android.tv.service.AiTitleExtractionServiceTest' \
+  --console=plain
+```
+
+结果：`BUILD SUCCESSFUL`；6 个测试类共 29 个测试，`skipped=0`、`failures=0`、`errors=0`。构建输出中的原生库位数提示和既有 deprecated API 提示不属于本次标题清洗改动。
+
+### 10.4 尚未实施与下一步
+
+- **尚未实施**：真正的扫描批次/目录 `ScanContext` 注入、独立规则中间产物缓存、季集号连续性/年份互斥群体校验、TMDB 联网候选验证和 100 条真实资源人工基线。
+- **下一步**：在确认现有调用方能够稳定提供同目录文件列表后，新增一个独立的批次上下文适配单元；该单元只负责产出受控 `contextTitles`，失败时传空列表并保持当前规则路径。
+- **回滚**：删除本次原子提交即可恢复原有单标题解析、AI prompt 和缓存键；缓存键使用 `v2`，不会读取新旧上下文混淆的旧条目。

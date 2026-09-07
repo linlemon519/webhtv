@@ -50,12 +50,17 @@ public final class MediaTitleCache {
         AiConfig safe = config == null ? new AiConfig().sanitize() : config.sanitize();
         String rawTitle = request == null ? "" : request.getRawTitle();
         if (rawTitle.trim().isEmpty()) return "";
-        String value = "v1|"
-                + Objects.toString(request.getSiteKey(), "") + "|"
-                + Objects.toString(request.getVodId(), "") + "|"
+        MediaTitleRequest safeRequest = request == null ? MediaTitleRequest.builder().build() : request;
+        StringBuilder context = new StringBuilder();
+        context.append(safeRequest.getFolderName()).append('|');
+        for (String title : safeRequest.getContextTitles()) context.append(title).append('\u001f');
+        String value = "v2|"
+                + Objects.toString(safeRequest.getSiteKey(), "") + "|"
+                + Objects.toString(safeRequest.getVodId(), "") + "|"
                 + Objects.toString(rawTitle, "") + "|"
-                + Objects.toString(request.getSearchKeyword(), "") + "|"
-                + Objects.toString(request.getEpisodeName(), "") + "|"
+                + Objects.toString(safeRequest.getSearchKeyword(), "") + "|"
+                + Objects.toString(safeRequest.getEpisodeName(), "") + "|"
+                + context + "|"
                 + Objects.toString(safe.getProtocol(), "") + "|"
                 + Objects.toString(safe.getEndpoint(), "") + "|"
                 + Objects.toString(safe.getModel(), "") + "|"
