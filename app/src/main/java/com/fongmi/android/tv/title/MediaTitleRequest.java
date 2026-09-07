@@ -219,6 +219,7 @@ public final class MediaTitleRequest {
 
     private static String cleanFolderName(String value) {
         String text = clean(value).replace('\\', '/');
+        while (text.length() > 1 && text.endsWith("/")) text = text.substring(0, text.length() - 1);
         int slash = text.lastIndexOf('/');
         if (slash >= 0) text = text.substring(slash + 1);
         return text.trim();
@@ -230,10 +231,8 @@ public final class MediaTitleRequest {
         for (String value : values) {
             String text = clean(value).replaceAll("(?i)https?://\\S+", " ").trim();
             String pathText = text.replace('\\', '/');
-            if (pathText.startsWith("/") || pathText.matches("^[A-Za-z]:/.*")) {
-                int slash = pathText.lastIndexOf('/');
-                text = slash >= 0 ? pathText.substring(slash + 1).trim() : pathText;
-            }
+            int slash = pathText.lastIndexOf('/');
+            if (slash >= 0) text = pathText.substring(slash + 1).trim();
             if (text.isEmpty() || text.length() > 160) continue;
             boolean exists = false;
             for (String item : result) if (item.equalsIgnoreCase(text)) {

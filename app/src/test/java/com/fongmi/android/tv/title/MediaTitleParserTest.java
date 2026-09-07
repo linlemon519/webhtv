@@ -189,6 +189,17 @@ public class MediaTitleParserTest {
     }
 
     @Test
+    public void parse_countsEachContextInputOnceWhenOneInputHasSeveralSearchCandidates() {
+        MediaTitleResolution resolution = new MediaTitleParser().parse(
+                MediaTitleRequest.builder()
+                        .rawTitle("qyn 第2季")
+                        .contextTitles(List.of("组 | 庆余年 | 01"))
+                        .build());
+
+        assertEquals(2, resolution.getContextGroupSize());
+    }
+
+    @Test
     public void cleanSearchTitles_rejectsPureUpdateRemark() {
         List<String> titles = new MediaTitleParser().cleanSearchTitles(
                 MediaTitleRequest.builder().rawTitle("更新至18集").build());

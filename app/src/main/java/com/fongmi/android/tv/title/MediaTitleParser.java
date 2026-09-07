@@ -145,12 +145,8 @@ public final class MediaTitleParser {
     private List<String> contextTitles(MediaTitleRequest request) {
         List<String> result = new ArrayList<>();
         for (String raw : request.getContextTitles()) {
-            for (String title : cleanSearchTitles(MediaTitleRequest.builder().rawTitle(raw).build())) {
-                if (title.isEmpty()) continue;
-                // Preserve one vote per input item. Candidate output is de-duplicated
-                // later by MediaTitleResolution, but consensus needs the frequency.
-                result.add(title);
-            }
+            List<String> candidates = cleanSearchTitles(MediaTitleRequest.builder().rawTitle(raw).build());
+            if (!candidates.isEmpty()) result.add(candidates.get(0));
         }
         return result;
     }
