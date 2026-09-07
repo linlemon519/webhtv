@@ -60,12 +60,21 @@ public class SiteDialogThemeSourceTest {
     }
 
     @Test
+    public void leanbackThemeChoicesAreDpadFocusable() throws Exception {
+        String layout = read("app/src/leanback/res/layout/adapter_theme.xml");
+        assertTrue(layout.contains("android:background=\"@drawable/selector_item\""));
+        assertTrue(layout.contains("android:focusable=\"true\""));
+        assertTrue(layout.contains("android:focusableInTouchMode=\"true\""));
+    }
+
+    @Test
     public void everyActivityAppliesThemeChangesImmediately() throws Exception {
         for (String flavor : new String[]{"mobile", "leanback"}) {
             String base = read("app/src/" + flavor + "/java/com/fongmi/android/tv/ui/base/BaseActivity.java");
-            assertTrue("theme changes must recreate activities in " + flavor,
-                    base.contains("RefreshEvent.Type.THEME")
-                            && base.contains("recreate()"));
+            String themeChange = flavor.equals("leanback")
+                    ? "event.getType() == RefreshEvent.Type.LANGUAGE || event.getType() == RefreshEvent.Type.UI_SCALE || event.getType() == RefreshEvent.Type.THEME"
+                    : "event.getType() == RefreshEvent.Type.LANGUAGE || event.getType() == RefreshEvent.Type.THEME";
+            assertTrue("theme changes must recreate activities in " + flavor, base.contains(themeChange));
         }
     }
 
