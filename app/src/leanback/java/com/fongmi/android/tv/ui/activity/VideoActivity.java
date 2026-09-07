@@ -75,6 +75,7 @@ import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.model.SearchProgress;
 import com.fongmi.android.tv.playback.PlaybackEventCollector;
 import com.fongmi.android.tv.playback.HistoryResumePayload;
+import com.fongmi.android.tv.playback.SubtitleRestoreCoordinator;
 import com.fongmi.android.tv.player.IntroSkipKinds;
 import com.fongmi.android.tv.player.IntroSkipPlayback;
 import com.fongmi.android.tv.player.PlayerHelper;
@@ -130,6 +131,7 @@ import com.fongmi.android.tv.ui.helper.EpisodeRangePolicy;
 import com.fongmi.android.tv.ui.helper.EpisodeSeasonPolicy;
 import com.fongmi.android.tv.ui.helper.SourceEpisodeSeasonCache;
 import com.fongmi.android.tv.ui.helper.PlayerControlFocusHelper;
+import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
 import com.fongmi.android.tv.ui.helper.TmdbEpisodeGridPolicy;
 import com.fongmi.android.tv.ui.helper.TmdbNavigation;
 import com.fongmi.android.tv.ui.helper.TmdbVideoPlayback;
@@ -210,6 +212,7 @@ import com.fongmi.android.tv.player.lyrics.LyricsRequest;
 import com.fongmi.android.tv.player.lyrics.LyricsRepository;
 import com.fongmi.android.tv.player.lyrics.LyricsResult;
 import com.fongmi.android.tv.player.lut.LutSetting;
+import com.fongmi.android.tv.player.mpv.MpvConfigStore;
 import com.fongmi.android.tv.setting.LyricsSetting;
 import com.fongmi.android.tv.ui.custom.AudioPlayerBackgroundDrawable;
 import com.fongmi.android.tv.ui.custom.KaraokeResultView;
@@ -345,6 +348,9 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private PartAdapter mPartAdapter;
     private BackdropAdapter mBackdropAdapter;
     private Map<String, View> mActionButtons;
+    private final List<View> mCustomActionViews = new ArrayList<>();
+    private HorizontalScrollView mCustomPortraitButtons;
+    private LinearLayout mCustomPortraitButtonRow;
     private QuickSearchDialog mQuickSearchDialog;
     private VodPlayerUiController mPlayerUi;
     private PlayerOsdController mOsd;
@@ -1618,6 +1624,9 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         addActionButton(PlayerButtonSetting.TIMER, mBinding.control.action.timer);
         addActionButton(PlayerButtonSetting.REPEAT, mBinding.control.action.repeat);
         PlayerButtonSetting.applyOrder(mBinding.control.action.container, mActionButtons);
+        setupCustomActionButtons();
+        placePanDiagnosticAction();
+        updatePanDiagnosticAction();
         applyActionButtonVisibility();
     }
 
@@ -1625,7 +1634,91 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mActionButtons.put(id, view);
     }
 
+    private void setupCustomActionButtons() {
+        ensureCustomButtonContainers();
+        for (View view : mCustomActionViews) {
+            ViewParent parent = view.getParent();
+            if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(view);
+        }
+        mCustomActionViews.clear();
+        mCustomPortraitButtonRow.removeAllViews();
+        List<MpvConfigStore.CustomButton> buttons = MpvConfigStore.customButtons();
+        for (int index = 0; index < buttons.size(); index++) {
+            MpvConfigStore.CustomButton button = buttons.get(index);
+            if (!button.enabled) continue;
+            TextView view = new TextView(this);
+            view.setTextSize(13);
+            view.setTextColor(Color.WHITE);
+            view.setGravity(Gravity.CENTER);
+            view.setMinHeight(ResUtil.dp2px(40));
+            view.setMinWidth(ResUtil.dp2px(56));
+            view.setPadding(ResUtil.dp2px(10), ResUtil.dp2px(4), ResUtil.dp2px(10), ResUtil.dp2px(4));
+            view.setBackgroundResource(R.drawable.selector_control_sheet_button);
+            view.setText(button.title);
+            view.setSingleLine(true);
+            view.setMaxWidth(ResUtil.dp2px(144));
+            view.setEllipsize(TextUtils.TruncateAt.END);
+            view.setContentDescription(button.title);
+            view.setOnClickListener(item -> {
+                if (player().sendMpvCustomButton(button.id, false)) {
+                    toggleCustomButtonState(item);
+                }
+                setR1Callback();
+            });
+            view.setOnLongClickListener(item -> {
+                if (player().sendMpvCustomButton(button.id, true)) {
+                    toggleCustomButtonState(item);
+                }
+                setR1Callback();
+                return true;
+            });
+            view.setFocusable(true);
+            view.setFocusableInTouchMode(true);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ResUtil.dp2px(40));
+            params.setMargins(ResUtil.dp2px(4), ResUtil.dp2px(2), ResUtil.dp2px(4), ResUtil.dp2px(2));
+            mCustomPortraitButtonRow.addView(view, params);
+            mCustomActionViews.add(view);
+        }
+        updateCustomButtonVisibility();
+    }
+
+    private void toggleCustomButtonState(View view) {
+        view.setSelected(!view.isSelected());
+    }
+
+    private void ensureCustomButtonContainers() {
+        if (mCustomPortraitButtons != null) return;
+        mCustomPortraitButtons = new HorizontalScrollView(this);
+        mCustomPortraitButtons.setHorizontalScrollBarEnabled(false);
+        mCustomPortraitButtons.setFillViewport(false);
+        mCustomPortraitButtons.setClipToPadding(false);
+        mCustomPortraitButtons.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        mCustomPortraitButtonRow = new LinearLayout(this);
+        mCustomPortraitButtonRow.setGravity(Gravity.CENTER_VERTICAL);
+        mCustomPortraitButtonRow.setOrientation(LinearLayout.HORIZONTAL);
+        mCustomPortraitButtonRow.setClipChildren(false);
+        mCustomPortraitButtons.addView(mCustomPortraitButtonRow, new HorizontalScrollView.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, 0, 0, ResUtil.dp2px(8));
+        ((ViewGroup) mBinding.control.getRoot()).addView(mCustomPortraitButtons, 0, params);
+    }
+
+    private void updateCustomButtonVisibility() {
+        boolean visible = service() != null && player().isMpv() && isVisible(mBinding.control.getRoot());
+        if (mCustomPortraitButtons != null) mCustomPortraitButtons.setVisibility(visible ? View.VISIBLE : View.GONE);
+    }
+
+    private void placePanDiagnosticAction() {
+        ViewGroup container = mBinding.control.action.container;
+        View diagnostic = mBinding.control.action.panDiagnostic;
+        View anchor = mBinding.control.action.playParams;
+        if (diagnostic.getParent() != container || anchor.getParent() != container) return;
+        container.removeView(diagnostic);
+        container.addView(diagnostic, Math.min(container.getChildCount(), container.indexOfChild(anchor) + 1));
+    }
+
     private void applyActionButtonVisibility() {
+        updateCustomButtonVisibility();
         mBinding.control.action.cast.setVisibility(isFullscreen() ? View.GONE : View.VISIBLE);
         updateImmersiveAudioAction();
         updatePanDiagnosticAction();
@@ -2724,6 +2817,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mInitialPlaybackPosition = resolveInitialPlaybackPosition();
         SpiderDebug.log("video-flow", "startPlayer dispatch initialPosition=%d music=%s ijk=%s", mInitialPlaybackPosition, isMusicLike(), service() != null && player().isIjk());
         long start = System.currentTimeMillis();
+        if (SubtitleRestoreCoordinator.restore(mHistory, player(), result)) syncHistory();
         startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata(), mInitialPlaybackPosition);
         SpiderDebug.log("video-flow", "startPlayer return cost=%dms sincePlayerStart=%dms", System.currentTimeMillis() - start, System.currentTimeMillis() - playerStartTime);
         subtitlePlaybackSession.onPlaybackStarted(this, result);
@@ -2733,6 +2827,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
                 .rawTitle(mHistory.getVodName())
                 .rawRemarks(mHistory.getVodRemarks())
                 .episodeName(getEpisode().getName())
+                .tmdbId(danmakuTmdbId())
+                .tmdbSeasonNumber(danmakuTmdbSeasonNumber())
                 .source(MediaTitleLearningExample.SOURCE_DANMAKU_AUTO)
                 .allowAi(true)
                 .build(), danmaku -> {
@@ -2749,6 +2845,19 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
             // 阅读结果接管前台，但保留本页：一次返回回到来源播放页。
         }
         return handled;
+    }
+
+    private int danmakuTmdbId() {
+        TmdbItem item = getMatchedTmdbItem();
+        return item == null ? 0 : item.getTmdbId();
+    }
+
+    private int danmakuTmdbSeasonNumber() {
+        TmdbItem item = getMatchedTmdbItem();
+        if (item == null || !item.isTv()) return 0;
+        Episode episode = getEpisode();
+        TmdbEpisode tmdbEpisode = episode == null ? null : episode.getTmdbEpisode();
+        return tmdbEpisode == null ? 0 : tmdbEpisode.getSeasonNumber();
     }
 
     private boolean canApplyPlayerResult() {
@@ -3082,6 +3191,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     public void onItemClick(Result result) {
         updateActionQuality(result);
         beginPlayHealth();
+        // 切清晰度也会重建 spec，字幕列表跟着重置，所以这里同样要恢复一次。
+        if (SubtitleRestoreCoordinator.restore(mHistory, player(), result)) syncHistory();
         startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata());
         subtitlePlaybackSession.onPlaybackStarted(this, result);
     }
@@ -4192,7 +4303,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void onDanmaku() {
-        DanmakuDialog.create().player(player()).identity(getKey(), getId(), mHistory == null ? "" : mHistory.getVodName(), getDanmakuEpisodeName()).show(this);
+        DanmakuDialog.create().player(player()).identity(getKey(), getId(), mHistory == null ? "" : mHistory.getVodName(), getDanmakuEpisodeName()).tmdb(danmakuTmdbId(), danmakuTmdbSeasonNumber()).show(this);
         hideControl();
     }
 
@@ -4374,6 +4485,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         showTopInfo();
         setPlayParamsState();
         mBinding.control.getRoot().setVisibility(View.VISIBLE);
+        updateCustomButtonVisibility();
         if (mOsd != null) mOsd.setControlsVisible(true);
         PlayerControlFocusHelper.ensureFocus(mBinding.control.getRoot(), view);
         setR1Callback();
@@ -4381,6 +4493,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     private void hideControl() {
         mBinding.control.getRoot().setVisibility(View.GONE);
+        updateCustomButtonVisibility();
         if (mOsd != null) mOsd.setControlsVisible(false);
         if (player().isPlaying()) mBinding.widget.top.setVisibility(View.GONE);
         App.removeCallbacks(mR1);
@@ -5091,6 +5204,11 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mClock.setCallback(this);
         // 轨道要等新引擎 prepare 完才回来，重建那一刻按钮还是隐藏态，弹窗必须在这里再抄一次。
         refreshControlDialog();
+    }
+
+    @Override
+    protected void onSubtitleSelected(Sub sub) {
+        if (SubtitleRestoreCoordinator.remember(mHistory, sub)) syncHistory();
     }
 
     @Override
@@ -10390,6 +10508,7 @@ private void showAudioSheet(BottomSheetDialog dialog, boolean draggable, boolean
         applyAudioSheetWindowGlass(dialog);
         hideSystemBarsForAudioSheet(dialog);
         focusAudioSheetContent(dialog);
+        syncAudioDialog(dialog);
     }
 
 private void showCompactPlaybackSheet(BottomSheetDialog dialog) {
@@ -10436,6 +10555,7 @@ private void showLyricsSearchSheetDialog(BottomSheetDialog dialog) {
         applyAudioSheetWindowGlass(dialog);
         hideSystemBarsForAudioSheet(dialog);
         focusAudioSheetContent(dialog);
+        syncAudioDialog(dialog);
         Window window = dialog.getWindow();
         if (window == null) return;
         WindowManager.LayoutParams params = window.getAttributes();
@@ -10474,6 +10594,7 @@ private void showAudioDrawerSheet(BottomSheetDialog dialog, boolean atStart) {
         applyAudioSheetWindowGlass(dialog);
         hideSystemBarsForAudioSheet(dialog);
         focusAudioSheetContent(dialog);
+        syncAudioDialog(dialog);
     }
 
 private void showAudioQueueDrawerDialog(Dialog dialog) {
@@ -10498,6 +10619,11 @@ private void showAudioQueueDrawerDialog(Dialog dialog) {
         window.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND);
         hideSystemBarsForAudioDialog(dialog);
         focusAudioQueueSelectedItem();
+        syncAudioDialog(dialog);
+    }
+
+private void syncAudioDialog(Dialog dialog) {
+        TouchOptimizationHelper.sync(dialog);
     }
 
 private void focusAudioSheetContent(BottomSheetDialog dialog) {
