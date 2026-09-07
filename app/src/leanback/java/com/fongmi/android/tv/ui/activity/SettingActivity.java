@@ -28,7 +28,6 @@ import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.AboutDialog;
 import com.fongmi.android.tv.ui.dialog.ConfigDialog;
-import com.fongmi.android.tv.ui.dialog.AppearanceDialog;
 import com.fongmi.android.tv.ui.dialog.DohDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.LiveDialog;
@@ -247,7 +246,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     }
 
     private void onAppearance(View view) {
-        AppearanceDialog.show(this);
+        SettingAppearanceActivity.start(this);
     }
 
     private void onPersonal(View view) {
